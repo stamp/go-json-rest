@@ -46,6 +46,8 @@ func main() {
 				// TODO populate res
 				return res
 			}
+
+                        return nil
 		},
 	}
 	handler.SetRoutes(
