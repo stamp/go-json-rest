@@ -85,6 +85,13 @@ type ResourceHandler struct {
 	// must be set to 'application/json' if the content is non-null.
 	EnableRelaxedContentType bool
 
+	// If the function is provided, then the support for CORS is enabled.
+	// Preflight requests (HTTP method OPTIONS) will be handled for all the defined
+	// endpoints. The headers returned by this function will be applied to all
+	// responses. If the function return nil, an error response is created to reject
+	// the request.
+	EnableCors func(info *CorsRequestInfo) *CorsResponseHeaders
+
 	// Custom logger, defaults to log.New(os.Stderr, "", log.LstdFlags)
 	Logger *log.Logger
 }
@@ -201,10 +208,33 @@ func (self *ResourceHandler) app() http.HandlerFunc {
 			return
 		}
 
+		// CORS info
+		var corsInfo *CorsRequestInfo
+		if self.EnableCors != nil {
+			corsInfo = newCorsRequestInfo(&request)
+		}
+
 		// find the route
 		route, params, pathMatched := self.internalRouter.findRouteFromURL(origRequest.Method, origRequest.URL)
+
+		// complete the request with the path params
+		if pathMatched {
+			request.PathParams = params
+		}
+
 		if route == nil {
 			if pathMatched {
+				// CORS preflight
+				if self.EnableCors != nil && corsInfo.IsPreflight {
+					corsHeaders := self.EnableCors(corsInfo)
+					if corsHeaders == nil {
+						Error(&writer, "Invalid CORS Preflight Request", http.StatusBadRequest)
+						return
+					} else {
+						corsHeaders.setHeaders(&writer)
+						return
+					}
+				}
 				// no route found, but path was matched: 405 Method Not Allowed
 				Error(&writer, "Method not allowed", http.StatusMethodNotAllowed)
 				return
@@ -215,8 +245,16 @@ func (self *ResourceHandler) app() http.HandlerFunc {
 			}
 		}
 
-		// a route was found, set the PathParams
-		request.PathParams = params
+		// CORS Actual Request
+		if self.EnableCors != nil {
+			corsHeaders := self.EnableCors(corsInfo)
+			if corsHeaders == nil {
+				Error(&writer, "Invalid CORS Request", http.StatusBadRequest)
+				return
+			}
+			corsHeaders.setHeaders(&writer)
+			// continue
+		}
 
 		// run the user code
 		handler := route.Func
@@ -233,6 +271,7 @@ func (self *ResourceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			self.statusWrapper(
 				self.timerWrapper(
 					self.recorderWrapper(
+                                                // TODO see how to move CORS logic as a middleware
 						self.app(),
 					),
 				),
