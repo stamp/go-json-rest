@@ -106,6 +106,6 @@ func (self *statusService) getStatus(w *ResponseWriter, r *Request) {
 
 	err := w.WriteJson(st)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w.Writer, err.Error(), 500)
 	}
 }

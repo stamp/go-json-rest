@@ -8,14 +8,14 @@ import (
 // Inherit from an object implementing the http.ResponseWriter interface,
 // and provide additional methods.
 type ResponseWriter struct {
-	http.ResponseWriter
+	Writer http.ResponseWriter
 	isIndented bool
 }
 
 // Encode the object in JSON, set the content-type header,
 // and call Write.
 func (self *ResponseWriter) WriteJson(v interface{}) error {
-	self.Header().Set("content-type", "application/json")
+	self.Writer.Header().Set("content-type", "application/json")
 	var b []byte
 	var err error
 	if self.isIndented {
@@ -26,7 +26,7 @@ func (self *ResponseWriter) WriteJson(v interface{}) error {
 	if err != nil {
 		return err
 	}
-	self.Write(b)
+	self.Writer.Write(b)
 	return nil
 }
 
@@ -34,8 +34,8 @@ func (self *ResponseWriter) WriteJson(v interface{}) error {
 // The standard plain text net/http Error helper can still be called like this:
 // http.Error(w, "error message", code)
 func Error(w *ResponseWriter, error string, code int) {
-	w.Header().Set("content-type", "application/json")
-	w.WriteHeader(code)
+	w.Writer.Header().Set("content-type", "application/json")
+	w.Writer.WriteHeader(code)
 	err := w.WriteJson(map[string]string{"Error": error})
 	if err != nil {
 		panic(err)
